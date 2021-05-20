@@ -19,10 +19,9 @@ def dbbHlq = 'MPARA.DBB.JENFILE'
 def dbbDaemonPort = '8080'
 def dbbGroovyzOpts= '-Dlog4j.configurationFile=/var/dbb/conf/log4j2.properties'
 // ---------------------------- Git (GitHub)
-def gitCredId = '60f9727e-637b-4041-a4e3-7300a9dc2a2e'
-def gitCred = 'pceckPAT'
+def gitCredId = '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'
+def gitCred = 'madp-github-PAT'
 def srcGitBranch = 'master'
-//def srcGitRepo =   'git@github.ibm.com:pceck/poc-workspaceIBM2.git'
 def srcGitRepo = 'https://github.ibm.com/pceck/poc-workspaceIBM2.git'
 
 def zAppBuildGitRepo = 'https://github.com/IBM/dbb-zappbuild.git'
