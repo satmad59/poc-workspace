@@ -1,0 +1,303 @@
+// Global variables
+// This is modified to use GitHub and  poc-workspaceIBM2 repo
+    println "**Skip the ZUNIT, CodeCoverate Test"
+// ---------------------------Agents labels
+def linuxAgent = 'master'
+// def agentLabel = 'zOSSlaveJ' > error ambiguous argument 'origin/sandbox^{commit}': unknown revision or path not in the working tree.
+def agentLabel = 'satmad_zOS_Agent'
+// ---------------------------Verbose
+//def verbose = false
+def buildVerbose = ''
+// verbose -> def buildVerbose = '-v'
+// ---------------------------Hosts and ports
+def linuxHost = 'mvpserver1.fyre.ibm.com'
+def zosHost = 'tvt7111.svl.ibm.com'
+def zosPort = '22'
+// ----------------------------DBB
+def dbbUrl = 'https://'+linuxHost+':9443/dbb/'
+def dbbHlq = 'MPARA.DBB.JENFILE'
+def dbbDaemonPort = '8080'
+def dbbGroovyzOpts= '-Dlog4j.configurationFile=/var/dbb/conf/log4j2.properties'
+// ---------------------------- Git (GitHub)
+def gitCredId = '60f9727e-637b-4041-a4e3-7300a9dc2a2e'
+def gitCred = 'pceckPAT'
+def srcGitBranch = 'master'
+//def srcGitRepo =   'git@github.ibm.com:pceck/poc-workspaceIBM2.git'
+def srcGitRepo = 'https://github.ibm.com/pceck/poc-workspaceIBM2.git'
+
+def zAppBuildGitRepo = 'https://github.com/IBM/dbb-zappbuild.git'
+def zAppBuildGitBranch = 'development' // Some important issues are not yet merged into master.
+def dbbGitRepo = 'https://github.com/IBM/dbb.git'
+def dbbGitBranch = 'master'
+
+// -------------------------------- Build type
+//  -i: incremental
+//  -f: full
+//  -c: only changed source
+def buildType='-i'
+//def buildType='--impactBuild'
+//def buildType='--scanOnly'
+// -----------------------Build properties related to a specific jenkins agent
+def buildConf=''
+
+// UCD definitions
+def ucdApplication = 'Test_PCE_App'
+def ucdProcess = 'DeployTestPCE_Artifactory'
+def ucdComponent = 'GenAppMVP'
+def ucdEnv = 'Test'
+def ucdBuztool = '/var/ucd/v7/bin/buztool.sh'
+
+// Artifactory
+// Note *artifactory_id is set in Jenkins global credentials as a userid/password pair
+def artiCredentialsId = 'peter_artifactory_id'
+def artiUrl = 'https://na.artifactory.swg-devops.com/artifactory/'
+def repositoryPath = 'hyc-mvp-team-maven-local/pceck'
+
+
+// ----------------------------  Build extra args
+//  -d: COBOL debug options
+def buildExtraParams='-d'
+// ----------------------------- code coverage daemon port
+//def ccPORT='8005'
+def CCDIR='/Appliance/IDz14.2.1'
+// --------------------------- Deploy only in case of source code modifications
+//def needDeploy = true
+// ===========================================================
+pipeline { agent { label linuxAgent }
+      environment { WORK_DIR = "${WORKSPACE}/BUILD-${BUILD_NUMBER}" }
+      options { skipDefaultCheckout(true) }
+// -------------------------------------------------------------------------
+      stages { stage('Init') {steps { script {env.DBB_HOME = '/var/dbb'
+       	echo "Repository: ${srcGitRepo} - branch: ${srcGitBranch} "
+	if ( env.ZOS_HOST ) {zosHost = env.ZOS_HOST} 					
+	else {env.ZOS_HOST = zosHost}
+	if ( env.ZOS_PORT ) {zosPort = env.ZOS_PORT} 						
+	else {env.ZOS_PORT = zosPort} 				
+	if ( env.BRANCH_NAME != null ) {srcGitBranch = env.BRANCH_NAME; }
+        if ( env.DEBUG_PIPELINE && env.DEBUG_PIPELINE == 'true' )     	
+        {verbose = true  buildVerbose = '-v'
+	echo sh(script: 'env|sort', returnStdout: true)}
+         }
+	         }
+	                            }
+// --------------------------------------------------------------------------
+        stage('Git Clone/Refresh') {
+            agent { label agentLabel }
+            steps {
+ // added by Regi ---------- delete directory  poc-workspace
+ //  since the 3rd build does not take the change.. BUG?
+                    sh(script: 'rm -rf ${WORKSPACE}/poc-workspaceIBM2', returnStdout: true)
+                    sh(script: 'rm -rf ${WORKSPACE}/poc-workspaceIBM2', returnStdout: true)
+ // ------------------------------------
+                script {
+                    dir('poc-workspaceIBM2') {
+                    println "branch: ${srcGitBranch}"
+                    println "WORKSPACE  is ${WORKSPACE}"
+ // -----------------------------------------------------------------
+	            scmVars = checkout([$class: 'GitSCM', branches: [[name: srcGitBranch]],
+		    doGenerateSubmoduleConfigurations: false,
+		    submoduleCfg: [],
+    extensions: [[$class: 'SparseCheckoutPaths',sparseCheckoutPaths:[[$class:'SparseCheckoutPath', path:'cobol/'],
+				[$class:'SparseCheckoutPath', path:'bms/'],
+				[$class:'SparseCheckoutPath', path:'copybook/'],
+				[$class:'SparseCheckoutPath', path:'link/'],
+				[$class:'SparseCheckoutPath', path:'application-conf/'],
+				]]
+				],								
+				userRemoteConfigs: [[credentialsId: gitCred,url: srcGitRepo, ]]])
+		                   } } } }
+// -------------------------------------------------------------------------
+		stage('DBB Build') {
+			steps {
+				script{
+					node( agentLabel ) {
+					/*	if ( dbbDaemonPort != null ) {
+							def r = sh script: "netstat | grep ${dbbDaemonPort}", returnStatus: true
+							if ( r == 0 ) {
+								println "DBB Daemon is running.."
+								dbbGroovyzOpts = "-DBB_DAEMON_PORT ${dbbDaemonPort} -DBB_DAEMON_HOST 127.0.0.1"
+							}
+							else {
+								println "WARNING: DBB Daemon not running build will be longer.."
+							//	currentBuild.result = "UNSTABLE"
+							}
+						}        */
+						
+echo "Starting DBB BUILD"
+sh "$DBB_HOME/bin/groovyz /u/pceck/dbb-zappbuild/build.groovy --logEncoding UTF-8 -w ${WORKSPACE} --application  poc-app --sourceDir ${WORKSPACE}/poc-workspaceIBM2  --workDir ${WORKSPACE}/BUILD-${BUILD_NUMBER}  --hlq ${dbbHlq}.JENFILE  $buildType  $buildVerbose $buildExtraParams "
+def files = findFiles(glob: "**BUILD-${BUILD_NUMBER}/**/buildList.txt")
+BLD_OUTPUT_FOLDER = sh (script: "ls ${WORKSPACE}/BUILD-${BUILD_NUMBER}  | grep build | sort -u", returnStdout: true).trim()
+//  def path1 = "${files[0].path}"
+//  def path2 = path1.split('/')
+// Do not deploy if nothing in the build list
+						needDeploy = files.length > 0 && files[0].length > 0
+						if (needDeploy) {
+						   sh "iconv -f ISO8859-1 -t IBM-1047 ${WORKSPACE}/BUILD-${BUILD_NUMBER}/${BLD_OUTPUT_FOLDER}/buildList.txt > ${WORKSPACE}/BUILD-${BUILD_NUMBER}/${BLD_OUTPUT_FOLDER}/buildList-1047.txt"
+			        		}
+						def files1 = findFiles(glob: "**BUILD-${BUILD_NUMBER}/*/buildList-1047.txt")
+			        		needTest = files1.length > 0 && files1[0].length > 0
+						
+ 					}
+				}
+			}
+			post {
+				always {
+					node( agentLabel ) {
+						dir("${WORKSPACE}/BUILD-${BUILD_NUMBER}") {
+							archiveArtifacts allowEmptyArchive: true,											
+                                                                                        artifacts: '**/*.log,**/*.json,**/*.html',
+                                                                                        excludes: '**/*clist',
+                                                                                        onlyIfSuccessful: false
+						}
+					}
+				}
+			}
+		}
+// - ------------------------------------------------------------------------
+
+/*
+		stage('Unit Tests') {
+			steps {
+                               println "**Unit Test stage starts **"
+                               println("** needTest = " + needTest)
+
+				script{
+					if (needTest) {
+             // ------ Linux agent ----------------------------------
+						node( linuxAgent ) {
+							sh "echo $PWD"
+							sh "rm -rf ${WORKSPACE}/../Testcases/results"
+							sh "mkdir ${WORKSPACE}/../Testcases/results"
+							sh "mkdir ${WORKSPACE}/BUILD-${BUILD_NUMBER}"
+							sh "mkdir ${WORKSPACE}/BUILD-${BUILD_NUMBER}/ccresults"
+						                   }
+            // ------ z/OS agent  ----------------------------------
+					    node( agentLabel ) {	
+		sh "$DBB_HOME/bin/groovyz  ${WORKSPACE}/poc-workspaceIBM2/poc-app/zAppBuild/zunit/ZUnitExecute.groovy -w ${WORKSPACE} --testConf ${WORKSPACE}/poc-workspaceIBM2/poc-workspaceIBM2/application-conf/ --cc --outDir ${WORKSPACE}/BUILD-${BUILD_NUMBER} --hlq ${dbbHlq}.JENFILE ${WORKSPACE}/BUILD-${BUILD_NUMBER}/buildList-1047.txt" 											
+ 					                       }
+					              }
+				      }
+			      }
+			post {
+				always {
+					node( agentLabel ) {
+						dir("${WORKSPACE}/BUILD-${BUILD_NUMBER}") {
+							archiveArtifacts allowEmptyArchive: true,
+											artifacts: '*.bzures',
+											excludes: '*clist',
+											onlyIfSuccessful: false
+						}
+					}
+				}
+			}
+		}
+// -------------------------------------------------------------------------
+		stage('Code coverage gating') {
+			steps {
+				script{
+                println "on Linux IDz is listening for the Code Coverage"
+					if (needTest) {
+					    node( linuxAgent ) {
+							sh "cp ${WORKSPACE}/../Testcases/results/* ${WORKSPACE}/BUILD-${BUILD_NUMBER}/ccresults/"
+							int ccpercent = sh (script: "$CCDIR/headless-cc/ccresults.sh ${WORKSPACE}/BUILD-${BUILD_NUMBER}/ccresults", returnStdout: true)
+							println "${ccpercent} + ccpercent"
+							if (ccpercent < 40) {
+								println "This build is unstable - the code coverage is less than 40%"
+								currentBuild.result = "UNSTABLE"
+							                    }
+						               }
+					              }
+				      }
+			      }
+			post {
+				always {
+					node( linuxAgent ) {
+						dir("${WORKSPACE}/BUILD-${BUILD_NUMBER}/ccresults") {
+							archiveArtifacts allowEmptyArchive: true,
+											artifacts: '*cczip',
+											onlyIfSuccessful: false
+						                                                    }
+					                   }
+				        }
+			     }
+	                                      }
+*/
+// -------------------------------------------------------------------------
+        stage('Push to IBM Taas Artifactory') {
+            steps {
+                script{
+                    echo 'Push to UCD Code station'
+                    if ( needDeploy ) {
+                        node( agentLabel ) {
+                             println "Push to UCD Code station"
+//   sh "$DBB_HOME/bin/groovyz ${WORKSPACE}/poc-workspaceIBM2/poc-app/zAppBuild/utilities/deploy.groovy --buztool  ${ucdBuztool}  --workDir ${WORKSPACE}/BUILD-${BUILD_NUMBER}  --component ${ucdComponent}  "
+   BUILD_OUTPUT_FOLDER = sh (script: "ls ${WORKSPACE}/BUILD-${BUILD_NUMBER}  | grep build | sort -u", returnStdout: true).trim()
+                             dir("${WORKSPACE}/BUILD-${BUILD_NUMBER}/${BUILD_OUTPUT_FOLDER}") {
+                                withCredentials([usernamePassword(credentialsId: artiCredentialsId, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                                    writeFile file: "${WORKSPACE}/BUILD-${BUILD_NUMBER}/artifactoy.properties", encoding: "ibm-1047",
+                                       text:"""EXTREPO.REPOSITORY_TYPE=Artifactory
+EXTREPO.USERNAME=$USERNAME
+EXTREPO.PASSWORD=$PASSWORD
+EXTREPO.REPOSITORY=${repositoryPath}
+EXTREPO.URL=${artiUrl}
+                                      """
+                                }
+   sh "$DBB_HOME/bin/groovyz /u/pceck/dbb-zappbuild/utilities/dbb-ucd-packaging.groovy --buztool ${ucdBuztool} --component ${ucdComponent} --workDir ${WORKSPACE}/BUILD-${BUILD_NUMBER}/${BUILD_OUTPUT_FOLDER} --prop ${WORKSPACE}/BUILD-${BUILD_NUMBER}/artifactoy.properties "
+                                           }
+                     }
+                                      }
+                     }
+                  }
+                                          }
+/*
+
+// -------------------------------------------------------------------------
+         stage('Push to IBM Taas Artifactory') {
+            steps {
+                script{
+echo 'Push to IBM Taas Artifactory'
+                    if ( needDeploy ) {
+                        node( agentLabel ) {
+                             println "Push to IBM Taas Artifactory"
+   sh "/var/ucd/v7/bin/buztool.sh createzosversion -c GenAppMVP -s ${WORKSPACE}/BUILD-${BUILD_NUMBER}/shiplist.xml -prop /var/ucd/v7/zossamples/buztool.properties "
+                                           }
+                                      }
+                     }
+                  }
+                                          }
+*/
+// ------------------------------------------------------------------------
+        stage('Deploy to CICS using UCD') {
+            steps {
+                script{
+echo 'Deploy to BIND and CICS using UCD'
+                    if ( needDeploy ) {
+                        node( linuxAgent ) {
+                            script{
+                                step(
+                                  [$class: 'UCDeployPublisher',
+                                    deploy: [
+                                        deployApp: ucdApplication,
+                                        deployDesc: 'Requested from Jenkins',
+                                        deployEnv: ucdEnv,
+                                        deployOnlyChanged: false,
+                                        deployProc: ucdProcess,
+                                        deployVersions: ucdComponent + ':latest'],
+                                    siteName: 'Jenkins2UCDServer'])
+//  siteName  is the UCD Profile name that is defined at Jenkins configuration
+                                   }
+                                           }
+                                      }
+                       }
+                  }
+// -------------------------------------------------------------------------
+/*  ---  Commented all post this is for GitLab
+post { 	success { updateGitlabCommitStatus(name: "Jenkins Job: '${env.JOB_NAME} [${env.BUILD_NUMBER} - ${env.BUILD_DISPLAY_NAME}]' (${env.BUILD_URL})", state: 'success') }
+	unstable { updateGitlabCommitStatus(name: "Jenkins Job: '${env.JOB_NAME} [${env.BUILD_NUMBER} - ${env.BUILD_DISPLAY_NAME}]' (${env.BUILD_URL})", state: 'success') }		
+	failure { updateGitlabCommitStatus(name: "Jenkins Job: '${env.JOB_NAME} [${env.BUILD_NUMBER} - ${env.BUILD_DISPLAY_NAME}]' (${env.BUILD_URL})", state: 'failed') }
+        aborted { updateGitlabCommitStatus(name: "Jenkins Job: '${env.JOB_NAME} [${env.BUILD_NUMBER} - ${env.BUILD_DISPLAY_NAME}]' (${env.BUILD_URL})", state: 'canceled') }		
+     }	
+----- end of comments   */
+}
+}
+}
