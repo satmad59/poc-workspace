@@ -19,7 +19,7 @@ def dbbHlq = 'MPARA.DBB.JENKINS'
 def dbbDaemonPort = '8080'
 def dbbGroovyzOpts= '-Dlog4j.configurationFile=/var/dbb/conf/log4j2.properties'
 // ---------------------------- Git (GitHub)
-def gitCredId = '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'
+def gitCredId = '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'
 def gitCred = 'madp-github-PAT'
 def srcGitBranch = 'master'
 def srcGitRepo = 'https://github.com/satmad59/poc-workspace.git'
