@@ -22,7 +22,7 @@ def dbbGroovyzOpts= '-Dlog4j.configurationFile=/var/dbb/conf/log4j2.properties'
 def gitCredId = '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'
 def gitCred = 'madp-github-PAT'
 def srcGitBranch = 'master'
-def srcGitRepo = 'https://github.ibm.com/pceck/poc-workspaceIBM2.git'
+def srcGitRepo = 'https://github.com/satmad59/poc-workspace.git'
 
 def zAppBuildGitRepo = 'https://github.com/IBM/dbb-zappbuild.git'
 def zAppBuildGitBranch = 'development' // Some important issues are not yet merged into master.
@@ -33,24 +33,24 @@ def dbbGitBranch = 'master'
 //  -i: incremental
 //  -f: full
 //  -c: only changed source
-def buildType='-i'
+def buildType='-f'
 //def buildType='--impactBuild'
 //def buildType='--scanOnly'
 // -----------------------Build properties related to a specific jenkins agent
 def buildConf=''
 
 // UCD definitions
-def ucdApplication = 'Test_PCE_App'
-def ucdProcess = 'DeployTestPCE_Artifactory'
-def ucdComponent = 'GenAppMVP'
-def ucdEnv = 'Test'
+def ucdApplication = 'MVP-cics-genapp-application'
+def ucdProcess = 'MVP-cics-genapp-deploy-process-Artifactory'
+def ucdComponent = 'MVP-cics-genapp-component'
+def ucdEnv = 'Development'
 def ucdBuztool = '/var/ucd/v7/bin/buztool.sh'
 
 // Artifactory
 // Note *artifactory_id is set in Jenkins global credentials as a userid/password pair
-def artiCredentialsId = 'peter_artifactory_id'
+def artiCredentialsId = 'madp_artifactory_ID'
 def artiUrl = 'https://na.artifactory.swg-devops.com/artifactory/'
-def repositoryPath = 'hyc-mvp-team-maven-local/pceck'
+def repositoryPath = 'hyc-mvp-team-maven-local/madhuparakala'
 
 
 // ----------------------------  Build extra args
@@ -85,11 +85,11 @@ pipeline { agent { label linuxAgent }
             steps {
  // added by Regi ---------- delete directory  poc-workspace
  //  since the 3rd build does not take the change.. BUG?
-                    sh(script: 'rm -rf ${WORKSPACE}/poc-workspaceIBM2', returnStdout: true)
-                    sh(script: 'rm -rf ${WORKSPACE}/poc-workspaceIBM2', returnStdout: true)
+                    sh(script: 'rm -rf ${WORKSPACE}/poc-app', returnStdout: true)
+                    sh(script: 'rm -rf ${WORKSPACE}/poc-app', returnStdout: true)
  // ------------------------------------
                 script {
-                    dir('poc-workspaceIBM2') {
+                    dir('poc-app') {
                     println "branch: ${srcGitBranch}"
                     println "WORKSPACE  is ${WORKSPACE}"
  // -----------------------------------------------------------------
@@ -123,7 +123,7 @@ pipeline { agent { label linuxAgent }
 						}        */
 						
 echo "Starting DBB BUILD"
-sh "$DBB_HOME/bin/groovyz /u/pceck/dbb-zappbuild/build.groovy --logEncoding UTF-8 -w ${WORKSPACE} --application  poc-app --sourceDir ${WORKSPACE}/poc-workspaceIBM2  --workDir ${WORKSPACE}/BUILD-${BUILD_NUMBER}  --hlq ${dbbHlq}.JENFILE  $buildType  $buildVerbose $buildExtraParams "
+sh "$DBB_HOME/bin/groovyz $dbbGroovyzOpts /u/mpara/dbb-zappbuild/build.groovy --logEncoding UTF-8 -w ${WORKSPACE} --application  poc-app --sourceDir ${WORKSPACE}/poc-app  --workDir ${WORKSPACE}/BUILD-${BUILD_NUMBER}  --hlq ${dbbHlq}  $buildType  $buildVerbose $buildExtraParams "
 def files = findFiles(glob: "**BUILD-${BUILD_NUMBER}/**/buildList.txt")
 BLD_OUTPUT_FOLDER = sh (script: "ls ${WORKSPACE}/BUILD-${BUILD_NUMBER}  | grep build | sort -u", returnStdout: true).trim()
 //  def path1 = "${files[0].path}"
@@ -225,11 +225,11 @@ BLD_OUTPUT_FOLDER = sh (script: "ls ${WORKSPACE}/BUILD-${BUILD_NUMBER}  | grep b
         stage('Push to IBM Taas Artifactory') {
             steps {
                 script{
-                    echo 'Push to UCD Code station'
+                    echo 'Push to artifactory'
                     if ( needDeploy ) {
                         node( agentLabel ) {
-                             println "Push to UCD Code station"
-//   sh "$DBB_HOME/bin/groovyz ${WORKSPACE}/poc-workspaceIBM2/poc-app/zAppBuild/utilities/deploy.groovy --buztool  ${ucdBuztool}  --workDir ${WORKSPACE}/BUILD-${BUILD_NUMBER}  --component ${ucdComponent}  "
+                             println "Push to artifactory"
+//   sh "$DBB_HOME/bin/groovyz ${WORKSPACE}/poc-app/zAppBuild/utilities/deploy.groovy --buztool  ${ucdBuztool}  --workDir ${WORKSPACE}/BUILD-${BUILD_NUMBER}  --component ${ucdComponent}  "
    BUILD_OUTPUT_FOLDER = sh (script: "ls ${WORKSPACE}/BUILD-${BUILD_NUMBER}  | grep build | sort -u", returnStdout: true).trim()
                              dir("${WORKSPACE}/BUILD-${BUILD_NUMBER}/${BUILD_OUTPUT_FOLDER}") {
                                 withCredentials([usernamePassword(credentialsId: artiCredentialsId, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
@@ -241,7 +241,7 @@ EXTREPO.REPOSITORY=${repositoryPath}
 EXTREPO.URL=${artiUrl}
                                       """
                                 }
-   sh "$DBB_HOME/bin/groovyz /u/pceck/dbb-zappbuild/utilities/dbb-ucd-packaging.groovy --buztool ${ucdBuztool} --component ${ucdComponent} --workDir ${WORKSPACE}/BUILD-${BUILD_NUMBER}/${BUILD_OUTPUT_FOLDER} --prop ${WORKSPACE}/BUILD-${BUILD_NUMBER}/artifactoy.properties "
+   sh "$DBB_HOME/bin/groovyz $dbbGroovyzOpts /u/mpara/dbb-zappbuild/utilities/dbb-ucd-packaging.groovy --buztool ${ucdBuztool} --component ${ucdComponent} --workDir ${WORKSPACE}/BUILD-${BUILD_NUMBER}/${BUILD_OUTPUT_FOLDER} --prop ${WORKSPACE}/BUILD-${BUILD_NUMBER}/artifactoy.properties "
                                            }
                      }
                                       }
