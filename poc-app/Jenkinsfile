@@ -15,7 +15,7 @@ def zosHost = 'tvt7111.svl.ibm.com'
 def zosPort = '22'
 // ----------------------------DBB
 def dbbUrl = 'https://'+linuxHost+':9443/dbb/'
-def dbbHlq = 'MPARA.DBB.JENFILE'
+def dbbHlq = 'MPARA.DBB.JENKINS'
 def dbbDaemonPort = '8080'
 def dbbGroovyzOpts= '-Dlog4j.configurationFile=/var/dbb/conf/log4j2.properties'
 // ---------------------------- Git (GitHub)
